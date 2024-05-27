@@ -1,7 +1,7 @@
 #  This Python script can download wav files from a S3 bucket at orcasound.net
 #  ts segments in the selected datetime interval are downloaded and converted to wav files
 
-##  Run pip3 install -m requirements.txt     in your code's working directory and virtual environment
+##  Run pip3 install -r requirements.txt     in your code's working directory and virtual environment
 
 ## Create a local directory for the wav file(s)
 
