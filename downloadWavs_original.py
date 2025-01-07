@@ -1,8 +1,8 @@
 import datetime as dt
 # from pipeline import NoiseAnalysisPipeline
 # from hydrophone import Hydrophone
-from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
-
+#from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
+from DateRangeHLSStream_original import DateRangeHLSStream
 import datetime as dt
 import os
 import tempfile
@@ -64,7 +64,7 @@ def get_wav_files(wavDir, hydrophone, dt_start, dt_end, max_files=None, wavFileL
             pass
 
 
-wavDir = "/home/val/Documents/12_26_2023_OSfailure/"
+wavDir = "/home/bigbox/Music/"
 dt_start = dt.datetime(2023, 12, 26, 14, 30)
 dt_stop =  dt.datetime(2023, 12, 26, 16, 0)
 hydro =  Hydrophone['ORCASOUND_LAB']
