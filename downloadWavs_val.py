@@ -45,7 +45,7 @@ class Hydrophone(Enum):
 def get_wav_files(wavDir, hydrophone, dt_start, dt_end, max_files=None, wavFileLength_seconds=600, overwrite_output=True):
     wav_folder = wavDir
     stream = DateRangeHLSStream(
-        'https://us-west-2.console.aws.amazon.com/s3/buckets/' + hydrophone.value.bucket + '/' + hydrophone.value.ref_folder,
+        'https://s3-us-west-2.amazonaws.com/' + hydrophone.value.bucket + '/' + hydrophone.value.ref_folder,
         wavFileLength_seconds,
         time.mktime(dt_start.timetuple()),
         time.mktime(dt_end.timetuple()),
