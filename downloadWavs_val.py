@@ -1,7 +1,8 @@
 import datetime as dt
 # from pipeline import NoiseAnalysisPipeline
 # from hydrophone import Hydrophone
-#from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
+#
+# from orca_hls_utils.DateRangeHLSStream import DateRangeHLSStream
 from DateRangeHLSStream_val import DateRangeHLSStream
 import datetime as dt
 import os
@@ -44,14 +45,24 @@ class Hydrophone(Enum):
 
 def get_wav_files(wavDir, hydrophone, dt_start, dt_end, max_files=None, wavFileLength_seconds=600, overwrite_output=True):
     wav_folder = wavDir
+
     stream = DateRangeHLSStream(
-        'https://us-west-2.console.aws.amazon.com/s3/buckets/' + hydrophone.value.bucket + '/' + hydrophone.value.ref_folder,
+        'https://s3-us-west-2.amazonaws.com/' + hydrophone.value.bucket + '/' + hydrophone.value.ref_folder,
         wavFileLength_seconds,
         time.mktime(dt_start.timetuple()),
         time.mktime(dt_end.timetuple()),
         wav_folder,
         overwrite_output
     )
+    # stream = DateRangeHLSStream(
+    #     'https://us-west-2.console.aws.amazon.com/s3/buckets/' + hydrophone.value.bucket + '/' + hydrophone.value.ref_folder,
+    #     wavFileLength_seconds,
+    #     time.mktime(dt_start.timetuple()),
+    #     time.mktime(dt_end.timetuple()),
+    #     wav_folder,
+    #     overwrite_output
+    # )
+
     if len(stream.valid_folders) == 0:
         print("EXITING...")
         return
@@ -68,8 +79,10 @@ def get_wav_files(wavDir, hydrophone, dt_start, dt_end, max_files=None, wavFileL
 
 
 wavDir = "/home/bigbox/Music/"
-dt_start = dt.datetime(2025, 1, 5, 20, 30)
-dt_stop =  dt.datetime(2025, 1, 5, 21, 0)
+wavDir = "/home/bigbox/PycharmProjects/OS_RT_BearingCode_PyC/valCodes/wavs/s3Wavs/"
+wavDir = "/home/bigbox/PycharmProjects/latency_test/wavs//"
+dt_start = dt.datetime(2026, 10, 5, 17, 0)
+dt_stop =  dt.datetime(2026, 10, 5, 17, 30)
 hydro =  Hydrophone['ORCASOUND_LAB']
 wavFileSecs =  60 * 60
 

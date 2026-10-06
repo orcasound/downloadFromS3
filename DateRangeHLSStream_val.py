@@ -18,6 +18,26 @@ from pytz import timezone
 from orca_hls_utils import datetime_utils, s3_utils, scraper
 
 
+def _folders_covering_range(all_folders, start_time, end_time):
+    """Return sorted folder timestamps whose live span overlaps [start_time, end_time].
+
+    Each S3 folder name is the unix time the segment started; it holds data
+    until the next folder's start time, and the newest folder is still live
+    (extends to +infinity). This correctly handles a request that falls
+    inside the latest, still-growing folder — the case where the upstream
+    s3_utils.get_folders_between_timestamp walks off the end of the list.
+    """
+    folders = sorted(int(f) for f in all_folders)
+    if not folders:
+        return []
+    valid = []
+    for i, f in enumerate(folders):
+        folder_end = folders[i + 1] if i + 1 < len(folders) else float("inf")
+        if f <= int(end_time) and folder_end > int(start_time):
+            valid.append(f)
+    return valid
+
+
 def get_readable_clipname(hydrophone_id, cliptime_utc):
     # cliptime is of the form 2020-09-27T00/16/55.677242Z
     cliptime_utc = timezone("UTC").localize(cliptime_utc)
@@ -90,7 +110,13 @@ class DateRangeHLSStream:
             )
         )
 
-        self.valid_folders = s3_utils.get_folders_between_timestamp(
+        # Each folder's timestamp is the start of its segment; it holds data
+        # until the next folder begins (and the latest folder is still live,
+        # so it extends to "now"). s3_utils.get_folders_between_timestamp
+        # walks off the end of the list when start_time is past every
+        # folder's timestamp, which happens whenever the requested range is
+        # inside the live/latest folder.
+        self.valid_folders = _folders_covering_range(
             all_hydrophone_folders, self.start_unix_time, self.end_unix_time
         )
         print("Found {} folders in date range".format(len(self.valid_folders)))
