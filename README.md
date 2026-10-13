@@ -11,6 +11,6 @@
 * dt_start = dt.datetime(2023, 12, 25, 19, 0)
 * dt_stop =  dt.datetime(2023, 12, 26, 16, 0)
 * hydro =  Hydrophone['ORCASOUND_LAB']
-* wavFileSecs = 24 * 60 * 60
+* wavFileSecs = 24 * 60 * 60  # this 24 hour files    set <0 for only one wav file
 
 ## Then run the script downloadWavs.py
