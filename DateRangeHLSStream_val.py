@@ -173,12 +173,23 @@ class DateRangeHLSStream:
         segment_end_index = segment_start_index + num_segments_in_wav_duration
 
         if segment_end_index > num_total_segments:
-            # move to the next folder and increment the
-            # current_clip_start_time to the new
+            # Move to the next folder. If there is no next folder, mark
+            # the stream as over instead of indexing past the end of
+            # valid_folders.
             self.current_folder_index += 1
-            self.current_clip_start_time = self.valid_folders[
-                self.current_folder_index
-            ]
+            if self.current_folder_index >= len(self.valid_folders):
+                self.is_end_of_stream = True
+                self.current_clip_start_time = self.end_unix_time
+                return None, None, None
+            # Only snap forward: if the requested clip time already falls
+            # inside the next folder's range, preserve it so a clip can
+            # begin partway through that folder's timeline.
+            next_folder_start = int(
+                self.valid_folders[self.current_folder_index]
+            )
+            self.current_clip_start_time = max(
+                int(self.current_clip_start_time), next_folder_start
+            )
             return None, None, None
 
         # Can get the whole segment so update the clip_start_time for the next
@@ -244,4 +255,6 @@ class DateRangeHLSStream:
 
     def is_stream_over(self):
         # returns true or false based on whether the stream is over
+        if self.is_end_of_stream:
+            return True
         return int(self.current_clip_start_time) >= int(self.end_unix_time)
