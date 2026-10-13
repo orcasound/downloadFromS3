@@ -43,6 +43,10 @@ class Hydrophone(Enum):
     SANDBOX = HPhoneTup("sandbox", "audio-sandbox", "ambient-sound-analysis", "acoustic-sandbox", "ambient-sound-analysis")
 
 
+    DEV_VAL = HPhoneTup("dev_val", "dev-streaming-orcasound-net", "rpi-dev-val", "acoustic-sandbox",
+                          "ambient-sound-analysis/dev_val")
+
+
 def get_wav_files(wavDir, hydrophone, dt_start, dt_end, max_files=None, wavFileLength_seconds=600, overwrite_output=True):
     wav_folder = wavDir
 
@@ -80,13 +84,18 @@ def get_wav_files(wavDir, hydrophone, dt_start, dt_end, max_files=None, wavFileL
 
 wavDir = "/home/bigbox/Music/"
 wavDir = "/home/bigbox/PycharmProjects/OS_RT_BearingCode_PyC/valCodes/wavs/s3Wavs/"
-wavDir = "/home/bigbox/PycharmProjects/latency_test/wavs//"
-dt_start = dt.datetime(2026, 10, 5, 17, 0)
-dt_stop =  dt.datetime(2026, 10, 5, 17, 30)
+wavDir = "/home/bigbox/PycharmProjects/latency_test/wavs/"
+wavDir = "/home/bigbox/PycharmProjects/dev_val/wavs/"
+dt_start = dt.datetime(2026, 10, 13, 12, 15)
+dt_stop =  dt.datetime(2026, 10, 13, 12, 17, 15)
 hydro =  Hydrophone['ORCASOUND_LAB']
-wavFileSecs =  60 * 60
+hydro = Hydrophone['DEV_VAL']
+wavFileSecs =  60 * 60   # <= 0 (e.g. -99) means "one WAV for the whole requested range"
 
+rangeSecs = (dt_stop - dt_start).total_seconds()
+wavLen = rangeSecs if wavFileSecs <= 0 else min(rangeSecs, wavFileSecs)
+print(f"Requested range: {dt_start} -> {dt_stop}  ({rangeSecs:.0f} s)  hydrophone={hydro.value.name}  wav length={wavLen:.0f} s")
 t1 = dt.datetime.now()
-get_wav_files(wavDir,hydro, dt_start, dt_stop, wavFileLength_seconds = min((dt_stop - dt_start).total_seconds(), wavFileSecs))
+get_wav_files(wavDir,hydro, dt_start, dt_stop, wavFileLength_seconds = wavLen)
 t2 = dt.datetime.now()
 print(f"Elapsed time for this download and conversion is {(t2 - t1).total_seconds()/60:.2f} minutes")

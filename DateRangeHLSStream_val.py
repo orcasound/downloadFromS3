@@ -127,12 +127,6 @@ class DateRangeHLSStream:
     def get_next_clip(self, current_clip_name=None):
         # Get current folder
         current_folder = int(self.valid_folders[self.current_folder_index])
-        (
-            clipname,
-            clip_start_time,
-        ) = datetime_utils.get_clip_name_from_unix_time(
-            self.folder_name.replace("_", "-"), self.current_clip_start_time
-        )
 
         # if real_time execution mode is specified
         if self.real_time:
@@ -158,21 +152,54 @@ class DateRangeHLSStream:
             sum([item.duration for item in stream_obj.segments])
             / num_total_segments
         )
-        num_segments_in_wav_duration = math.ceil(
-            self.polling_interval_in_seconds / target_duration
-        )
 
-        # calculate the start index by computing the current time - start of
-        # current folder
-        segment_start_index = math.ceil(
-            datetime_utils.get_difference_between_times_in_seconds(
-                self.current_clip_start_time, current_folder
+        # Pick the segment that contains the requested clip start time.
+        # Honor #EXT-X-PROGRAM-DATE-TIME when the uploader emits it: the
+        # folder name is only its creation unix time and does not account
+        # for the Pi's ffmpeg startup lag (~2 s) before the first audio
+        # sample is captured.
+        target_unix = float(self.current_clip_start_time)
+        clip_duration = float(self.polling_interval_in_seconds)
+        segment_start_index = None
+        pdt_present = False
+        for i, seg in enumerate(stream_obj.segments):
+            if seg.program_date_time is None:
+                continue
+            pdt_present = True
+            seg_end_unix = seg.program_date_time.timestamp() + seg.duration
+            if seg_end_unix > target_unix:
+                segment_start_index = i
+                break
+
+        if segment_start_index is None and not pdt_present:
+            # No PROGRAM-DATE-TIME tags; fall back to folder-name math.
+            segment_start_index = math.ceil(
+                datetime_utils.get_difference_between_times_in_seconds(
+                    self.current_clip_start_time, current_folder
+                )
+                / target_duration
             )
-            / target_duration
-        )
-        segment_end_index = segment_start_index + num_segments_in_wav_duration
 
-        if segment_end_index > num_total_segments:
+        needs_advance = segment_start_index is None
+
+        # Compute the trim offset within the first segment and how many
+        # segments cover (trim + requested clip duration). Downloading
+        # one extra segment when the clip spans a boundary is required
+        # because ffmpeg will skip start_trim seconds at the output.
+        start_trim = 0.0
+        picked_pdt_ts = None
+        if not needs_advance:
+            picked_pdt = stream_obj.segments[segment_start_index].program_date_time
+            if picked_pdt is not None:
+                picked_pdt_ts = picked_pdt.timestamp()
+                start_trim = max(0.0, target_unix - picked_pdt_ts)
+            num_segs_needed = math.ceil(
+                (start_trim + clip_duration) / target_duration
+            )
+            segment_end_index = segment_start_index + num_segs_needed
+            needs_advance = segment_end_index > num_total_segments
+
+        if needs_advance:
             # Move to the next folder. If there is no next folder, mark
             # the stream as over instead of indexing past the end of
             # valid_folders.
@@ -181,26 +208,36 @@ class DateRangeHLSStream:
                 self.is_end_of_stream = True
                 self.current_clip_start_time = self.end_unix_time
                 return None, None, None
-            # Only snap forward: if the requested clip time already falls
-            # inside the next folder's range, preserve it so a clip can
-            # begin partway through that folder's timeline.
-            next_folder_start = int(
+            next_folder_start = float(
                 self.valid_folders[self.current_folder_index]
             )
             self.current_clip_start_time = max(
-                int(self.current_clip_start_time), next_folder_start
+                float(self.current_clip_start_time), next_folder_start
             )
             return None, None, None
 
-        # Can get the whole segment so update the clip_start_time for the next
-        # clip
-        # We do this before we actually do the pulling in case there is a
-        # problem with this clip
-        self.current_clip_start_time = (
-            datetime_utils.add_interval_to_unix_time(
-                self.current_clip_start_time, self.polling_interval_in_seconds
-            )
+        # The WAV's actual start wall-clock time: normally the user's
+        # requested target (we trim the segment lead-in to hit it to the
+        # sample). In the rare case the request precedes the picked
+        # segment (asked before the stream existed), start at the
+        # segment's own PDT instead.
+        if picked_pdt_ts is not None and target_unix < picked_pdt_ts:
+            wav_start_unix = picked_pdt_ts
+            start_trim = 0.0
+        else:
+            wav_start_unix = target_unix
+
+        self.current_clip_start_time = wav_start_unix
+        (
+            clipname,
+            clip_start_time,
+        ) = datetime_utils.get_clip_name_from_unix_time(
+            self.folder_name.replace("_", "-"), self.current_clip_start_time
         )
+
+        # Advance by exactly the clip duration from this clip's start so
+        # consecutive WAVs tile the user's grid with no overlap or gap.
+        self.current_clip_start_time = wav_start_unix + clip_duration
 
         # Create tmp path to hold .ts segments
         with TemporaryDirectory() as tmp_path:
@@ -225,11 +262,16 @@ class DateRangeHLSStream:
                     with open(os.path.join(tmp_path, f), "rb") as fd:
                         shutil.copyfileobj(fd, wfd)
 
-            # read the concatenated .ts and write to wav
+            # Decode the concatenated .ts and write WAV, trimming the
+            # lead-in from the first segment with output-side -ss (sample
+            # accurate for audio) and capping length with -t so the WAV
+            # covers exactly [wav_start_unix, wav_start_unix + clip_duration).
             audio_file = clipname + ".wav"
             wav_file_path = os.path.join(self.wav_dir, audio_file)
             stream = ffmpeg.input(os.path.join(tmp_path, Path(hls_file)))
-            stream = ffmpeg.output(stream, wav_file_path)
+            stream = ffmpeg.output(
+                stream, wav_file_path, ss=start_trim, t=clip_duration
+            )
             ffmpeg.run(
                 stream, overwrite_output=self.overwrite_output, quiet=False
             )
